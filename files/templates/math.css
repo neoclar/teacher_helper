@@ -1,0 +1,44 @@
+
+h1 {
+  font-size: 44px;
+  text-align: center;
+}
+
+h2 {
+  font-size: 44px;
+  text-align: center;
+}
+
+h3 {
+  font-size: 36px;
+  text-align: center;
+}
+
+h4 {
+  font-size: 20px;
+}
+
+span.frac {
+    display: inline-block;
+    text-align: center;
+    vertical-align: middle;
+  }
+  span.frac > sup, span.frac > sub {
+    display: block;
+    font: inherit;
+    padding: 0 0.3em;
+  }
+  span.frac > sup {border-bottom: 0.08em solid;}
+  span.frac > span {display: none;}
+
+.keep-together {
+  page-break-inside: avoid;
+}
+
+.new-page {
+  page-break-before: always;
+}
+
+.break-after {
+  page-break-after: always;
+}

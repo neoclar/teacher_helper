@@ -1,0 +1,31 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <!-- <link href="math.css" rel="stylesheet"> -->
+</head>
+<body>
+    {% for task_list in tasks %}
+        <h1 style="color: #2b2301;">Ответы</h1>
+        <h2>{{subject}}</h2>
+        <h3 style="color: #574700;">Тема: "{{theme}}"<br>Вариант {{task_list[0]}}</h3>
+        {% for task in task_list[1] %}
+            {{task}}
+        {% endfor %}
+        <footer style="text-align: right; padding-right: 15px;"><span style="font-size: small;"><em>Сгенерировано ботом.</em></span></footer>
+        <p class="new-page"></p>
+    {% endfor %}
+    <!-- <h3 style="color: #2e6c80;">1.</h3>
+    <p>{{first}}</p>
+    <p style="padding-left: 25px;">
+        7&nbsp;
+        <span class="frac">
+            <sup>42</sup>
+            <span>/</span>
+            <sub>73</sub>
+        </span>
+    </p> -->
+    <!-- <p>Page 1, paragraph 1</p>
+    <p class="new-page">Page 2, paragraph 1</p>
+    <p>Page 2, paragraph 2</p> -->
+</body>
+</html>
