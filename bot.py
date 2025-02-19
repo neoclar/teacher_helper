@@ -1,256 +1,298 @@
 
-import telebot
-import tools.pdf as pdf
-import os
-# import re
-import genenerators.Math.equations as equations
-import genenerators.Math.progression as progression
-from telebot.types import ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
-from tools.SQL import Database, conv_dict, conv_str, conv_list
+# python3 -m venv my_venv
+# source env/bin/activate
+import logging
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.enums import ParseMode
+from aiogram.filters import Command, CommandStart
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, BufferedInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.client.default import DefaultBotProperties
+from collections import defaultdict
+from random import randint
+from pdf import generate as generate_files
 
+import generators.info
+import generators.info.EGE14
+import generators.info.systems
+import generators.math
+import generators.math.equations
+import generators.math.progression
 
-token = '6802426286:AAGr8y4Il4T2K_1s3cnVTHj-4bPg2nvNPO0'
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-themes = {
-    'Math': {'Уравнения': equations, 'Прогрессия': progression},
-    'Info': {'Что-то': '', 'Ещё что-то': ''}
+API_TOKEN = "6802426286:AAEQehlx2gzHrzNm95wfQI1OT8qL7GY32Wc"
+
+bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher()
+
+user_data = defaultdict(lambda: {
+    "selected_tasks": [],
+    "current_path": []
+})
+import generators
+# MENU = {
+#     "subjects": {
+#         "computer_science": "💻 Computer Science",
+#         "mathematics": "📚 Mathematics"
+#     },
+#     "topics": {
+#         "computer_science": {
+#             "ege14": "📊 EGE14",
+#             "systems": "⚙️ Systems"
+#         },
+#         "mathematics": {
+#             "equations": "📏 Equations",
+#             "progression": "📈 Progression"
+#         }
+#     },
+#     "tasks": {
+#         "computer_science": {
+#             "ege14": {"diff1": {"name": "Difficulty 1", "gen": lambda: generators.inf.EGE14.type1(1)},
+#                       "diff2": {"name": "Difficulty 2", "gen": lambda: generators.inf.EGE14.type1(2)}},
+#             "systems": {"diff1": {"name": "Difficulty 1", "gen": lambda: generators.inf.systems.convertions(1)},
+#                         "diff2": {"name": "Difficulty 2", "gen": lambda: generators.inf.systems.convertions(2)},
+#                         "diff3": {"name": "Difficulty 3", "gen": lambda: generators.inf.systems.convertions(3)},
+#                         "diff4": {"name": "Difficulty 4", "gen": lambda: generators.inf.systems.convertions(4)}}
+#         },
+#         "mathematics": {
+#             "equations": {"linear": {"name": "Linear", "gen": lambda: generators.math.equations.equation_line(randint(5,10),randint(1,4))},
+#                           "square": {"name": "Square", "gen": lambda: generators.math.equations.equation_degree()},
+#                           "biquadratic": {"name": "Biquadratic", "gen": lambda: generators.math.equations.equation_degree_bi()}},
+#             "progression": {"arithmetic": {"name": "Arithmetic", "gen": lambda: generators.math.progression.arithmetic()},
+#                             "geometric": {"name": "Geometric", "gen": lambda: generators.math.progression.geometric()}}
+#         }
+#     }
+# }
+MENU = {
+    "subjects": {
+        "computer_science": "💻 Информатика",
+        "mathematics": "📚 Математика"
+    },
+    "topics": {
+        "computer_science": {
+            "ege14": "📊 EGE14",
+            "systems": "⚙️ Системы счисления"
+        },
+        "mathematics": {
+            "equations": "📏 Уравнения",
+            "progression": "📈 Прогрессия"
+        }
+    },
+    "tasks": {
+        "computer_science": {
+            "ege14": {"diff1": {"name": "Сложность1", "gen": lambda: generators.info.EGE14.type1(0)},
+                      "diff2": {"name": "Сложность2", "gen": lambda: generators.info.EGE14.type1(1)}},
+            "systems": {"diff1": {"name": "Сложность1", "gen": lambda: generators.info.systems.convertions(1)},
+                        "diff2": {"name": "Сложность2", "gen": lambda: generators.info.systems.convertions(2)},
+                        "diff3": {"name": "Сложность3", "gen": lambda: generators.info.systems.convertions(3)},
+                        "diff4": {"name": "Сложность4", "gen": lambda: generators.info.systems.convertions(4)}}
+        },
+        "mathematics": {
+            "equations": {"linear": {"name": "Линейные", "gen": lambda: generators.math.equations.equation_line(randint(5,10),randint(1,3))},
+                          "square": {"name": "Квадратные", "gen": lambda: generators.math.equations.equation_degree()},
+                          "biquadratic": {"name": "Биквадратные", "gen": lambda: generators.math.equations.equation_degree_bi()}},
+            "progression": {"arithmetic": {"name": "Арифметическая", "gen": lambda: generators.math.progression.arithmetic()},
+                            "geometric": {"name": "Геометрическая", "gen": lambda: generators.math.progression.geometric()}}
+        }
+    }
 }
+    # subject_name = MENU["subjects"][path[0]]
+    # topic_name = MENU["topics"][task.split(":")[0]][task.split(":")[1]]
+    # task_name = MENU["tasks"][task.split(":")[0]][task.split(":")[1]][task_id]
+    # print(path, task_id)
+    # user_data[user_id]["selected_tasks"].append(f"{subject_name} - {topic_name} - {task_name['name']}")
+def format_selected(selected):
+    # print(selected)
+    selected = [f"{MENU["subjects"][task.split(":")[0]]} - {MENU["topics"][task.split(":")[0]][task.split(":")[1]]} - {MENU["tasks"][task.split(":")[0]][task.split(":")[1]][task.split(":")[2]]['name']}" for task in selected]
+    return "\n".join([f"{i+1}. {task}" for i, task in enumerate(selected)]) or "No tasks selected"
 
-sub_names = {
-    'Math': 'Математика',
-    'Info': 'Информатика (в разработке)'
-}
+def build_control_buttons(selected):
+    builder = InlineKeyboardBuilder()
+    if selected:
+        # builder.row(InlineKeyboardButton(text="➖ Delete last", callback_data="remove_last"))
+        # builder.row(InlineKeyboardButton(text="✅ Finish", callback_data="finish"))
+        builder.row(InlineKeyboardButton(text="➖ Удалить последнее", callback_data="remove_last"))
+        builder.row(InlineKeyboardButton(text="✅ Готово", callback_data="finish"))
+    return builder
 
-steps_down = {'theme': 'sub',  'vars': 'theme', 'tasks': 'vars'}
+def build_number_keyboard():
+    builder = InlineKeyboardBuilder()
+    
+    # Create 12 rows of 5 numbers each
+    for row in range(12):
+        for col in range(1, 6):
+            number = row * 5 + col
+            builder.add(InlineKeyboardButton(
+                text=str(number),
+                callback_data=f"number:{number}"
+            ))
+        builder.adjust(5)
+    
+    # Add back button
+    # builder.row(InlineKeyboardButton(text="🔙 Back", callback_data="number_back"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="number_back"))
+    
+    return builder.as_markup()
 
-bot = telebot.TeleBot(token)
-def easyopen(path):
-    with open(path, 'rb') as misc:
-        f=misc.read()
-    return f
+async def show_current_menu(message: types.Message, user_id: int):
+    path = user_data[user_id]["current_path"]
+    selected = user_data[user_id]["selected_tasks"]
+    
+    if len(path) == 0:
+        await show_subjects(message, user_id)
+    elif len(path) == 1:
+        await show_topics(message, user_id, path[0])
+    elif len(path) == 2:
+        await show_tasks(message, user_id, path[0], path[1])
 
-@bot.message_handler(commands=["start", "help"])
-def start_message(message: telebot.types.Message):
-    bot.send_message(message.chat.id, '''Привет! Я бот, который поможет тебе в создании заданий!
-по команде /create появится окно с созданием твоего варианта.''')
+async def show_subjects(message: types.Message, user_id: int):
+    builder = InlineKeyboardBuilder()
+    for sid, sname in MENU["subjects"].items():
+        builder.add(InlineKeyboardButton(text=sname, callback_data=f"subject:{sid}"))
+    
+    control = build_control_buttons(user_data[user_id]["selected_tasks"])
+    if control._markup:
+        builder.attach(control)
+    
+    # text = f"Selected tasks:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nChoose subject:"
+    text = f"Выбранные задания:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nВыберите предмет:"
+    # print(message.from_user.id, message.chat.id)
+    if message.from_user.id==message.chat.id:
+        await message.answer(text, reply_markup=builder.as_markup())
+    else:
+        await message.edit_text(text, reply_markup=builder.as_markup())
 
-@bot.message_handler(commands=["create"])
-def inline(message: telebot.types.Message):
-    db = Database("database.db")
-    # print(conv_list(db.get_tables()))
-    db.delete_string('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={message.from_user.id})')
-    db.add_string('users', user_id_out=message.from_user.id)
-    markup = InlineKeyboardMarkup(row_width=1)
-    db.execute(f"""INSERT OR IGNORE INTO tasks_common (user_id)
-                  VALUES ((SELECT user_id_in FROM users WHERE user_id_out={message.from_user.id}))""")
-    buttons = [InlineKeyboardButton(sub_names[subject], callback_data=f"['sub', '{subject}']" if sub_names[subject]!='Info' else 'ignore') for subject in list(themes)]
-    markup.add(*buttons)
-    bot.send_message(message.chat.id, 'Выбери предмет', reply_markup=markup)
+async def show_topics(message: types.Message, user_id: int, subject: str):
+    builder = InlineKeyboardBuilder()
+    for tid, tname in MENU["topics"][subject].items():
+        builder.add(InlineKeyboardButton(text=tname, callback_data=f"topic:{tid}"))
+    
+    # builder.row(InlineKeyboardButton(text="🔙 Back", callback_data="back"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
+    control = build_control_buttons(user_data[user_id]["selected_tasks"])
+    if control._markup:
+        builder.attach(control)
+    
+    # text = f"Selected tasks:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nChoose topic:"
+    text = f"Выбранные задания:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nВыберите тему:"
+    await message.edit_text(text, reply_markup=builder.as_markup())
 
-@bot.callback_query_handler(func=lambda c:True)
-def inline(callback: telebot.types.CallbackQuery):
-    db = Database("database.db")
-    if eval(callback.data)[0]=='back':
-        callback.data = eval(callback.data)[1]
-        if callback.data == 'sub':
-            db.delete_string('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-            db.add_string('users', user_id_out=callback.from_user.id)
-            markup = InlineKeyboardMarkup(row_width=1)
-            db.execute(f"""INSERT OR IGNORE INTO tasks_common (user_id)
-                        VALUES ((SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id}))""")
-            buttons = [InlineKeyboardButton(sub_names[subject], callback_data=f"['sub', '{subject}']" if sub_names[subject]!='Info' else 'ignore') for subject in list(themes)]
-            markup.add(*buttons)
-            bot.delete_message(chat_id=callback.from_user.id, message_id=callback.message.id)
-            bot.send_message(callback.from_user.id, 'Выбери предмет', reply_markup=markup)
-            return
-        elif callback.data[0] == 'tasks':
-            dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-            print(len(list(eval('{'+str(dict_data['tasks'][0])+'}'))))
-            if len(list(eval('{'+str(dict_data['tasks'][0])+'}')))!=1:
-                taskdb = eval('{'+str(dict_data['tasks'][0])+'}')
-                del taskdb[max(list(taskdb))]
-                db.rename_cell('tasks_common', tasks=str(taskdb)[1:-1], __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-            else:
-                callback.data = ['theme', dict_data['theme'][0]]
-                db.delete_cell('tasks_common', column='tasks', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-        bot.delete_message(chat_id=callback.from_user.id, message_id=callback.message.id)
-        callback.message.id = bot.send_message(callback.from_user.id, 'Обрабатываю').id
-        callback.data = str(callback.data)
-    if eval(callback.data)[0]=='sub':
-        sub = eval(callback.data)[1]
-        db.rename_cell('tasks_common', sub=sub, __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-        # db.add_string('tasks_common', user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})', sub=sub)
-        markup = InlineKeyboardMarkup(row_width=5)
-        buttons = [InlineKeyboardButton(var, callback_data=f"['vars', '{var}']") for var in range(1, 26)]
-        buttons.append(InlineKeyboardButton('Назад', callback_data=f"['back', 'sub']"))
-        markup.add(*buttons)
-        message = f'''
-Предмет: {sub_names[eval(callback.data)[1]]}
-Выбери количество вариантов
-'''
-        bot.edit_message_text(chat_id=callback.from_user.id, message_id=callback.message.id, text=message, reply_markup=markup)
-    elif eval(callback.data)[0]=='vars':
-        vars = eval(callback.data)[1]
-        db.rename_cell('tasks_common', vars=vars, __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-        markup = InlineKeyboardMarkup(row_width=1)
-        dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-        buttons = [InlineKeyboardButton(theme, callback_data=f"['theme', '{theme}']") for theme in list(themes[dict_data['sub'][0]])]
-        buttons.append(InlineKeyboardButton('Назад', callback_data=f"'sub', '{dict_data['sub'][0]}'"))
-        markup.add(*buttons)
-        message = f'''
-Предмет: {sub_names[str(dict_data['sub'])[2:-2]]}
-Вариантов: {str(dict_data['vars'])[1:-1]}
-Выбери тему
-'''
-        bot.edit_message_text(chat_id=callback.from_user.id, message_id=callback.message.id, text=message, reply_markup=markup)
-    elif eval(callback.data)[0]=='theme':
-        theme = eval(callback.data)[1]
-        db.rename_cell('tasks_common', theme=theme, __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-        dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-        markup = InlineKeyboardMarkup(row_width=1)
-        buttons = [InlineKeyboardButton(str(task), callback_data=f"['tasks', '{task}']") for task in list(eval(f"themes[{str(dict_data['sub'])[1:-1]}][{str(dict_data['theme'])[1:-1]}]").TASKLIB)]
-        buttons.append(InlineKeyboardButton('Назад', callback_data=f"'vars', {dict_data['vars'][0]}"))
-        markup.add(*buttons)
-        dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-        message = f'''
-Предмет: {sub_names[str(dict_data['sub'])[2:-2]]}
-Вариантов: {str(dict_data['vars'])[1:-1]}
-Тема: {str(dict_data['theme'])[2:-2]}
-Выбери первое задание
-'''
-        bot.edit_message_text(chat_id=callback.from_user.id, message_id=callback.message.id, text=message, reply_markup=markup)
-    elif eval(callback.data)[0]=='tasks':
-        task = eval(callback.data)[1]
-        dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-        taskdb = eval('{'+str(dict_data['tasks'][0])+'}')
-        # print(taskdb)
-        # print(task, task!='back')
-        if task!='back':
-            if taskdb=={None}:
-                db.rename_cell('tasks_common', tasks=f"1:'{task}'", __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-            else:
-                db.rename_cell('tasks_common', tasks=f"{str(taskdb)[1:-1]},{max(list(taskdb))+1}:'{task}'", __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})')
-            dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-            taskdb = eval('{'+str(dict_data['tasks'][0])+'}')
-        # print(dict_data)
-        # if dict_data['vars']>max(list(taskdb)):
-        markup = InlineKeyboardMarkup(row_width=1)
-        buttons = [InlineKeyboardButton(str(task), callback_data=f"['tasks', '{task}']") for task in list(eval(f"themes[{str(dict_data['sub'])[1:-1]}][{str(dict_data['theme'])[1:-1]}]").TASKLIB)]
-        buttons.append(InlineKeyboardButton('Убрать последнее задание' if len(list(taskdb))!=0 else 'Назад', callback_data=f"['back', ['tasks', 'back']]"))
-        buttons.append(InlineKeyboardButton('Готово', callback_data="['end']"))
-        markup.add(*buttons)
-        message = f'''
-Предмет: {sub_names[str(dict_data['sub'])[2:-2]]}
-Вариантов: {str(dict_data['vars'])[1:-1]}
-Тема: {str(dict_data['theme'])[2:-2]}{str([f"""
-Задание {num}: {task}""" for num, task in zip(taskdb.keys(), taskdb.values())]+['' if taskdb!={None} or task=='back' else f"""
-Задание 1: {task}"""])}
-Выбери задание или нажми "Готово"
-'''.replace('\\n', '\n').replace("['", '').replace("']", '').replace("', '", '')
+async def show_tasks(message: types.Message, user_id: int, subject: str, topic: str):
+    builder = InlineKeyboardBuilder()
+    for task_id, task_info in MENU["tasks"][subject][topic].items():
+        # print(task_info, user_data[user_id]['selected_tasks'])
+        builder.add(InlineKeyboardButton(text=task_info["name"], callback_data=f"task:{task_id}"))
+    
+    # builder.row(InlineKeyboardButton(text="🔙 Back", callback_data="back"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
+    control = build_control_buttons(user_data[user_id]["selected_tasks"])
+    if control._markup:
+        builder.attach(control)
+    
+    # text = f"Selected tasks:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nChoose task type:"
+    text = f"Выбранные задания:\n{format_selected(user_data[user_id]['selected_tasks'])}\n\nВыберите тип задания:"
+    await message.edit_text(text, reply_markup=builder.as_markup())
 
-# Задание {num}: {task}""" for num, task in zip(taskdb.keys(), taskdb.values())]+[f"""
-# Задание {max(taskdb.keys())+1}: {task}"""] if taskdb!={} or task=='back' else f"""
-# Задание 1: {task}""")}
+@dp.message(CommandStart())
+async def cmd_start(message: types.Message):
+    await message.answer("Привет! Я бот, который поможет тебе в создании заданий!\nпо команде /create появится окно с созданием твоего варианта.")
 
-        bot.edit_message_text(chat_id=callback.from_user.id, message_id=callback.message.id, text=message, reply_markup=markup)
-    elif eval(callback.data)[0]=='end':
-        dict_data = conv_dict(db.get_all_data_filter('tasks_common', __i__user_id=f'(SELECT user_id_in FROM users WHERE user_id_out={callback.from_user.id})'))
-        module = themes[dict_data['sub'][0]][dict_data['theme'][0]]
-        mod_tasks = module.TASKLIB
-        taskdb = eval('{'+str(dict_data['tasks'][0])+'}')
-        tasks = [mod_tasks[task_name] for task_name in taskdb.values()]
-        html_task, html_answer = send_pdf(tasks, int(dict_data['vars'][0]))
-        
-        context = {'sub': sub_names[dict_data['sub'][0]], 'theme': dict_data['theme'][0], 'tasks': html_task}
-        file_task = pdf.create(context, 'files/pdfgens/tasks', 'files/templates/task.html')
-        bot.send_document(callback.from_user.id, easyopen(file_task), visible_file_name='Задания.pdf')
-        os.remove(file_task)
-        context = {'sub': sub_names[dict_data['sub'][0]], 'theme': dict_data['theme'][0], 'tasks': html_answer}
-        file_answer = pdf.create(context, 'files/pdfgens/answers', 'files/templates/answer.html')
-        bot.send_document(callback.from_user.id, easyopen(file_answer), visible_file_name='Ответы.pdf')
-        os.remove(file_answer)
-        # bot.send_message(callback.from_user.id, 'message', reply_markup=InlineKeyboardMarkup(row_width=5).add(InlineKeyboardButton('var', callback_data='1'*64))) # Больше 64 выходит ошибка
+@dp.message(Command('create'))
+async def cmd_create(message: types.Message):
+    user_id = message.from_user.id
+    user_data[user_id].clear()
+    user_data[user_id] = {"selected_tasks": [], "current_path": []}
+    await show_subjects(message, user_id)
 
-def send_pdf(tasks, vars):
-    html_task_vars = []
-    html_answer_vars = []
-    for vari in range(1, vars+1):
-        html_task = []
-        html_answer = []
-        previous_tasks = []
-        for i, _task in zip(range(1, len(tasks)+1), tasks):
-            if isinstance(_task, str):
-                task = eval(_task)
-            else:
-                task = _task()
-            while task in previous_tasks:
-                if isinstance(_task, str):
-                    task = eval(_task)
-                else:
-                    task = _task()
-            previous_tasks.append(task)
-            if _task.__globals__['TASKDES'][_task]!='':
-                html_task.append(f'''
-                <h4 style="color: #2e6c80;">{i}. {_task.__globals__['TASKDES'][_task]}</h4>
-                <p style="padding-left: 25px; font-size: 20px;"><strong>{task[0]}</strong></p>
-                <p font-size: 20px;><strong>Ответ: ____________________</strong></p>''')
-            else:
-                html_task.append(f'''
-                <h4> <span style="color: #2e6c80;">{i}.</span> {task[0]}</h4>
-                <p font-size: 20px;><strong>Ответ: ____________________</strong></p>''')
-            html_answer.append(f'''
-            <h4 style="color: #2e6c80;"><strong>{i}.</h4> Ответ: {task[1]}</strong>''')
-        html_task_vars.append([vari, html_task])
-        html_answer_vars.append([vari, html_answer])
-    # print(html_task)
-    return html_task_vars, html_answer_vars
+@dp.callback_query(F.data.startswith("subject:"))
+async def select_subject(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    subject = callback.data.split(":")[1]
+    user_data[user_id]["current_path"] = [subject]
+    await show_topics(callback.message, user_id, subject)
 
-@bot.message_handler(content_types=['text'])
-def react_text(message):
-    bot.send_message(message.chat.id, 'Я не знаю, что тебе ответить...')
+@dp.callback_query(F.data.startswith("topic:"))
+async def select_topic(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    topic = callback.data.split(":")[1]
+    user_data[user_id]["current_path"].append(topic)
+    subject = user_data[user_id]["current_path"][0]
+    await show_tasks(callback.message, user_id, subject, topic)
 
+@dp.callback_query(F.data.startswith("task:"))
+async def select_task(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    path = user_data[user_id]["current_path"]
+    task_id = callback.data.split(":")[1]
+    # subject_name = MENU["subjects"][path[0]]
+    # topic_name = MENU["topics"][path[0]][path[1]]
+    # task_name = MENU["tasks"][path[0]][path[1]][task_id]
+    # print(path, task_id)
+    # user_data[user_id]["selected_tasks"].append(f"{subject_name} - {topic_name} - {task_name['name']}")
+    user_data[user_id]["selected_tasks"].append(f"{path[0]}:{path[1]}:{task_id}")
+    # user_data[user_id]["current_path"] = []
+    # MENU["tasks"][subject][topic]
+    # print(path)
+    await show_tasks(callback.message, user_id, path[0], path[1])
 
+@dp.callback_query(F.data == "back")
+async def go_back(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    path = user_data[user_id]["current_path"]
+    
+    if len(path) > 0:
+        user_data[user_id]["current_path"].pop()
+    
+    await show_current_menu(callback.message, user_id)
 
-bot.polling()
+@dp.callback_query(F.data == "remove_last")
+async def remove_last_task(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if user_data[user_id]["selected_tasks"]:
+        user_data[user_id]["selected_tasks"].pop()
+    await show_current_menu(callback.message, user_id)
 
+@dp.callback_query(F.data == "finish")
+async def finish_selection(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    await callback.message.edit_text(
+        # "Select number of options:",
+        "Выберите количество вариантов:",
+        reply_markup=build_number_keyboard()
+    )
 
+@dp.callback_query(F.data.startswith("number:"))
+async def handle_number_selection(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    number = int(callback.data.split(":")[1])
+    
+    selected = user_data[user_id]["selected_tasks"]
+    # print(selected)
+    response = (
+        # f"Final selection:\n{format_selected(selected)}"
+        # f"\n\nNumber of options: {number}"
+        f"Выбранные задания:\n{format_selected(selected)}"
+        f"\n\nКоличество вариантов: {number}"
+    )
+    await callback.message.edit_text(response)
 
-# @bot.message_handler(commands=['start', 'help'])
-# # InputTextMessageContent
-# def choice_subject(message):
-#     markup = InlineKeyboardMarkup(row_width=1)
-#     subjects = ['Math', 'russ']
+    tasks = [[MENU["tasks"][task.split(":")[0]][task.split(":")[1]][task.split(":")[2]]['gen']() for task in selected] for n in range(number)]
+    tasks_pdf, answers_pdf = generate_files(tasks)
+    tasks_file = BufferedInputFile(tasks_pdf, filename="tasks.pdf")
+    answers_file = BufferedInputFile(answers_pdf, filename="answers.pdf")
+    await callback.message.reply_document(tasks_file)
+    await callback.message.reply_document(answers_file)
+    user_data[user_id].clear()
+    await callback.answer()
 
-#     buttons = [InlineKeyboardButton(subject, callback_data=subject) for subject in subjects]
-#     markup.add(*buttons)
-#     bot.send_message(message.chat.id, 'Выбери предмет', reply_markup=markup)
-#     # bot.register_next_step_handler(message, choice_count_variants)
+@dp.callback_query(F.data == "number_back")
+async def handle_number_back(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    await show_current_menu(callback.message, user_id)
+    await callback.answer()
 
-# def get_subject(message):
-#     markup = InlineKeyboardMarkup(row_width=1)
-#     subjects = ['Math', 'russ']
-#     buttons = [InlineKeyboardButton(subject, callback_data=subject) for subject in subjects]
-#     markup.add(*buttons)
-#     bot.send_message(message.chat.id, 'Выбери предмет', reply_markup=markup)
-#     bot.register_next_step_handler(message, choice_count_variants)
-
-
-# def choice_count_variants(message):
-#     markup = InlineKeyboardMarkup(row_width=3)
-#     buttons = [InlineKeyboardButton(subject, callback_data=subject) for subject in range(9)]
-#     markup.add(*buttons)
-#     bot.send_message(message.chat.id, 'Выбери количество вариантов', reply_markup=markup)
-#     bot.register_next_step_handler(message, choice_count_variants)
-
-# def choice_count_variants(message):
-#     markup = InlineKeyboardMarkup(row_width=3)
-#     buttons = [InlineKeyboardButton(subject, callback_data=subject) for subject in range(9)]
-#     markup.add(*buttons)
-#     bot.send_message(message.chat.id, 'Выбери количество заданий', reply_markup=markup)
-#     bot.register_next_step_handler(message, function)
-
-
-# @bot.callback_query_handler(func=lambda call:True)
-# def inline_handler(callback_query):
-#     print(callback_query)
-#     choice_count_variants(callback_query)
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(dp.start_polling(bot))
